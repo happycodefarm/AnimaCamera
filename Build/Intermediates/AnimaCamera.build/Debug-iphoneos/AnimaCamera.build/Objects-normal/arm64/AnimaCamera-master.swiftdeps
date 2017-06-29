@@ -1,0 +1,7 @@
+version: "Apple Swift version 3.1 (swiftlang-802.0.53 clang-802.0.42)"
+options: "859d88f638c888692abbbc16337d2c85"
+build_time: [552065028, 188658000]
+inputs:
+  "/Users/guillaume/Usine/AnimaCamera/AnimaCamera/ViewController.swift": [552064962, 0]
+  "/Users/guillaume/Usine/AnimaCamera/AnimaCamera/PreviewView.swift": [527258660, 0]
+  "/Users/guillaume/Usine/AnimaCamera/AnimaCamera/AppDelegate.swift": [540301272, 0]
