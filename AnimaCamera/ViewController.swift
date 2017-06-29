@@ -73,6 +73,7 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
         
         captureDevice = deviceDiscoverySession?.devices[0]
         beginSession()
+        
     }
     
     private func focus(with focusMode: AVCaptureFocusMode, exposureMode: AVCaptureExposureMode, at devicePoint: CGPoint, monitorSubjectAreaChange: Bool) {
