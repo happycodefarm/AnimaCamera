@@ -80,6 +80,7 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
             if let device = self.captureDevice{
                 do {
                     try device.lockForConfiguration()
+                    
                     /*
                      Setting (focus/exposure)PointOfInterest alone does not initiate a (focus/exposure) operation.
                      Call set(Focus/Exposure)Mode() to apply the new point of interest.
