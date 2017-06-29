@@ -34,7 +34,7 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
     private let sessionQueue = DispatchQueue(label: "session queue", attributes: [], target: nil) // Communicate with the session and other session
     var liveOrNot = true
     
-    // av
+    //MARK: av
     
     override func viewWillAppear(_ animated: Bool) {
         self.view.backgroundColor = UIColor.black
@@ -49,9 +49,6 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
         let value = UIInterfaceOrientation.landscapeRight.rawValue
         UIDevice.current.setValue(value, forKey: "orientation")
         
-    
-//        NotificationCenter.default.addObserver(self, selector: #selector(ViewController.screenDidChange(_:)), name:NSNotification.Name.UIScreenDidConnect, object: nil)
-//        NotificationCenter.default.addObserver(self, selector: #selector(ViewController.screenDidChange(_:)), name:NSNotification.Name.UIScreenDidDisconnect, object: nil)
 
         let doubleTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTape(_:)))
         doubleTapGesture.numberOfTapsRequired = 2
@@ -77,35 +74,6 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
         captureDevice = deviceDiscoverySession?.devices[0]
         beginSession()
     }
-    
-//    func screenDidChange(_ notification: Notification) {
-//        return
-//        print(notification)
-//        let screens = UIScreen.screens
-//        let screenCount = screens.count
-//        
-//        if screenCount > 1 { //  we have 2 screens
-//            self.externalScreen = screens[0]
-//            
-//            if self.externalWindow == nil {
-//                let externalWindow = UIWindow(frame: self.externalScreen.bounds)
-//                self.externalWindow = externalWindow
-//            }
-//            
-//            self.externalWindow.addSubview(self.previewView)
-//            
-//            for view in self.view.subviews {
-//                if view as UIView == self.previewView {
-//                    view.removeFromSuperview()
-//                }
-//            }
-//
-//        } else {
-//            self.externalWindow = nil
-//            self.externalScreen = nil
-//            self.view.addSubview(self.previewView)
-//        }
-//    }
     
     private func focus(with focusMode: AVCaptureFocusMode, exposureMode: AVCaptureExposureMode, at devicePoint: CGPoint, monitorSubjectAreaChange: Bool) {
         sessionQueue.async { [unowned self] in
