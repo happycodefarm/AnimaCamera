@@ -10,32 +10,30 @@ import UIKit
 import AVFoundation
 import AVKit
 
-
 import ImageIO
-class ViewController: UIViewController, AVPlayerViewControllerDelegate {
+class ViewController: UIViewController {
     
     @IBOutlet private weak var previewView: PreviewView!
-    
-    var externalWindow:UIWindow!
-    var externalScreen:UIScreen!
+
+    lazy var secondWindow = UIWindow()
     
     let captureSession = AVCaptureSession()
     var captureDevice : AVCaptureDevice?
-    var previewLayer : AVCaptureVideoPreviewLayer?
     
-    var captureDeviceInput = AVCaptureDeviceInput()
-    let captureVideoOutput = AVCaptureVideoDataOutput()
-    
+    var captureDeviceInput : AVCaptureDeviceInput? //AVCaptureDeviceInput()
+    var captureVideoOutput : AVCaptureVideoDataOutput? // AVCaptureVideoDataOutput()
     
     var exposureLocked = false
     var focusValue: Float = 0.5
     var exposureValue: Float = 0.5
     
+    var autoFocus = true
+    var autoExposure = true
+    var torch = false
+    
     private let sessionQueue = DispatchQueue(label: "session queue", attributes: [], target: nil) // Communicate with the session and other session
-    var liveOrNot = true
     
     //MARK: av
-    
     override func viewWillAppear(_ animated: Bool) {
         self.view.backgroundColor = UIColor.black
     }
@@ -43,13 +41,35 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
     override func viewDidLoad() {
         
         super.viewDidLoad()
-        // Do any additional setup after loading the view, typically from a nib.
-        previewLayer?.backgroundColor = UIColor.black.cgColor
+        
+        registerSettingsBundle()
+        updateFromDefaults()
+        
+        UserDefaults.standard.addObserver(self,
+                                          forKeyPath: "autoFocus",
+                                          options: [.new, .old, .initial, .prior],
+                                          context: nil)
+        
+        UserDefaults.standard.addObserver(self,
+                                          forKeyPath: "autoExposure",
+                                          options: [.new, .old, .initial, .prior],
+                                          context: nil)
+        
+        UserDefaults.standard.addObserver(self,
+                                          forKeyPath: "torch",
+                                          options: [.new, .old, .initial, .prior],
+                                          context: nil)
+        
+        //Subscribing to a UIScreenDidConnect/DisconnectNotification to react to changes in the status of connected screens.
+        let screenConnectionStatusChangedNotification = NotificationCenter.default
+        
+        screenConnectionStatusChangedNotification.addObserver(self, selector:(#selector(ViewController.screenConnectionStatusChanged)), name:NSNotification.Name.UIScreenDidConnect, object:nil)
+        
+        screenConnectionStatusChangedNotification.addObserver(self, selector:(#selector(ViewController.screenConnectionStatusChanged)), name:NSNotification.Name.UIScreenDidDisconnect, object:nil)
         
         let value = UIInterfaceOrientation.landscapeRight.rawValue
         UIDevice.current.setValue(value, forKey: "orientation")
         
-
         let doubleTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTape(_:)))
         doubleTapGesture.numberOfTapsRequired = 2
         self.view.addGestureRecognizer(doubleTapGesture)
@@ -62,20 +82,92 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
         self.view.addGestureRecognizer(pinchGesture)
         
         let panExposureGesture = UIPanGestureRecognizer(target: self, action: #selector(handlePanExposure(_:)))
-     
+        panExposureGesture.minimumNumberOfTouches = 1
+        panExposureGesture.maximumNumberOfTouches = 1
         self.view.addGestureRecognizer(panExposureGesture)
         
+        let panFocusGesture = UIPanGestureRecognizer(target: self, action: #selector(handlePanFocus(_:)))
+        panFocusGesture.minimumNumberOfTouches = 2
+        panFocusGesture.maximumNumberOfTouches = 2
+        self.view.addGestureRecognizer(panFocusGesture)
         
-        captureSession.sessionPreset = AVCaptureSessionPreset1920x1080
+        captureSession.sessionPreset = AVCaptureSession.Preset.hd1920x1080
 
-        let deviceDiscoverySession = AVCaptureDeviceDiscoverySession(deviceTypes: [.builtInWideAngleCamera], mediaType: AVMediaTypeVideo, position: .back)
-        assert((deviceDiscoverySession?.devices.count)!>0, "no devices !!")
+        let deviceDiscoverySession = AVCaptureDevice.DiscoverySession(deviceTypes: [AVCaptureDevice.DeviceType.builtInWideAngleCamera], mediaType: AVMediaType.video, position: .back)
+        assert((deviceDiscoverySession.devices.count)>0, "no devices !!")
         
-        captureDevice = deviceDiscoverySession?.devices[0]
+        captureDevice = deviceDiscoverySession.devices[0]
         beginSession()
     }
     
-    private func focus(with focusMode: AVCaptureFocusMode, exposureMode: AVCaptureExposureMode, at devicePoint: CGPoint, monitorSubjectAreaChange: Bool) {
+    func registerSettingsBundle(){
+        UserDefaults.standard.register(defaults: [String:AnyObject]())
+        UserDefaults.standard.synchronize()
+    }
+    
+    func updateFromDefaults(){
+        
+        //Get the defaults
+        let defaults = UserDefaults.standard
+        
+        //Set the controls to the default values.
+        autoFocus = defaults.bool(forKey: "autoFocus")
+        if autoFocus == true {
+            enableAutofocus()
+        }
+        print("saved autoFocus: \(autoFocus)")
+        
+        autoExposure = defaults.bool(forKey: "autoExposure")
+        if autoExposure == true {
+            enableAutoExposure()
+        }
+        print("saved autoFocus: \(autoExposure)")
+        
+        torch = defaults.bool(forKey: "torch")
+        setTorch(state: torch)
+        print("saved torch: \(torch)")
+        
+    }
+    
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+        
+        if keyPath == "autoFocus" || keyPath == "autoExposure" || keyPath == "torch"{
+            print("updating key \(keyPath ?? "bug ?")")
+            updateFromDefaults()
+        }
+ 
+    }
+    
+    @objc func defaultsChanged(){
+        print("default changed")
+        updateFromDefaults()
+    }
+    
+    @objc
+    func screenConnectionStatusChanged () {
+        if UIScreen.screens.count == 1 {
+          
+            
+        }   else {
+            
+//            let screens : Array = UIScreen.screens
+//            let newScreen : AnyObject! = screens.last
+//
+//            secondWindow.frame = newScreen.bounds
+//            secondWindow.screen = newScreen as! UIScreen
+//
+//            let secondView = UIView(frame: secondWindow.frame)
+//            secondView.layer.addSublayer(previewView.videoPreviewLayer)
+//
+//            secondWindow.addSubview(secondView)
+//            secondWindow.makeKeyAndVisible()
+//
+//            previewView.window!.makeKey()
+            
+        }
+    }
+    
+    private func focus(with focusMode: AVCaptureDevice.FocusMode, exposureMode: AVCaptureDevice.ExposureMode, at devicePoint: CGPoint, monitorSubjectAreaChange: Bool) {
         sessionQueue.async { [unowned self] in
             if let device = self.captureDevice{
                 do {
@@ -126,6 +218,7 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
             device.unlockForConfiguration()
         }
     }
+    
     func exposureBy(value: Float) {
         
         if let device = captureDevice {
@@ -160,39 +253,115 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
             }
             
             device.focusMode = .locked
-            device.setFocusModeLockedWithLensPosition(value, completionHandler: { (time) -> Void in
+            device.setFocusModeLocked(lensPosition: value, completionHandler: { (time) -> Void in
                 print("focused to \(value)")
             })
             device.unlockForConfiguration()
-            
         }
     }
-
+    
+    func focusBy(value : Float) {
+        if let device = captureDevice {
+            do {
+                try device.lockForConfiguration()
+            } catch _ {
+                return
+            }
+            
+            let min:Float = 0.0
+            let max:Float = 1.0
+            
+            let currentFocus = device.lensPosition
+            let targetFocus = currentFocus + value
+            let focus = fmin(max,fmax(min,targetFocus));
+            
+            device.focusMode = .locked
+            device.setFocusModeLocked(lensPosition: focus, completionHandler: { (time) -> Void in
+                print("focused to \(value)")
+            })
+            
+            device.unlockForConfiguration()
+        }
+    }
+    
+    func enableAutofocus() {
+        if let device = captureDevice {
+            do {
+                try device.lockForConfiguration()
+            } catch _ {
+                return
+            }
+            
+            device.focusMode = .continuousAutoFocus
+           
+            device.unlockForConfiguration()
+        }
+    }
+    
+    func enableAutoExposure() {
+        if let device = captureDevice {
+            do {
+                try device.lockForConfiguration()
+            } catch _ {
+                return
+            }
+            
+            device.exposureMode = .continuousAutoExposure
+            device.unlockForConfiguration()
+        }
+    }
+    
+    func setTorch(state: Bool) {
+        if let device = self.captureDevice{
+            if device.hasTorch {
+                do {
+                    try device.lockForConfiguration()
+                    device.torchMode = state == false ? .off : .on
+                    device.unlockForConfiguration()
+                } catch {
+                    print("error!!")
+                }
+            }
+        }
+    }
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
         // Dispose of any resources that can be recreated.
     }
     
     // gestures
+    @objc
     func handleDoubleTape(_ gestureRecognizer: UITapGestureRecognizer) {
-        print("double tap")
-       
-        let devicePoint = self.previewView.videoPreviewLayer.captureDevicePointOfInterest(for: gestureRecognizer.location(in: gestureRecognizer.view))
-        //        focus(with: .autoFocus, exposureMode: (exposureLocked ?.autoExpose:.continuousAutoExposure), at: devicePoint, monitorSubjectAreaChange: true)
+        if autoFocus == true {
+            return
+        }
+        let devicePoint = self.previewView.videoPreviewLayer.captureDevicePointConverted(fromLayerPoint: gestureRecognizer.location(in: gestureRecognizer.view))
         focus(with: .autoFocus, exposureMode: .locked, at: devicePoint, monitorSubjectAreaChange: true)
     }
     
+    @objc
     func handlePanExposure(_ gestureRecognize: UIPanGestureRecognizer) {
-         //if gestureRecognize.state == .began {
-                   //}
+        if autoExposure == true {
+            return
+        }
         let exposure = gestureRecognize.translation(in: self.view).x/20.0
         gestureRecognize.setTranslation(CGPoint.zero, in: self.view)
         
-        //print("pan\(exposure)")
         exposureBy(value: Float(exposure))
-        //exposureTo(value: Float(focus))
     }
     
+    @objc
+    func handlePanFocus(_ gestureRecognize: UIPanGestureRecognizer) {
+        if autoFocus == true {
+            return
+        }
+        let focus = gestureRecognize.translation(in: self.view).x/20.0
+        gestureRecognize.setTranslation(CGPoint.zero, in: self.view)
+        
+        focusBy(value: Float(focus))
+    }
+    
+    @objc
     func handleLongPress(_ gestureRecognizer: UILongPressGestureRecognizer) {
         if gestureRecognizer.state != .began {
             return
@@ -202,6 +371,7 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
                 do {
                     try device.lockForConfiguration()
                     device.torchMode = device.torchMode == .on ? .off : .on
+                    device.unlockForConfiguration()
                 } catch {
                     print("error!!")
                 }
@@ -209,6 +379,7 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
         }
     }
     
+    @objc
     func handlePinch(_ gestureRecognize: UIPinchGestureRecognizer) {
         let pinchVelocityDividerFactor = 10.0
         if gestureRecognize.state == .changed {
@@ -232,13 +403,13 @@ class ViewController: UIViewController, AVPlayerViewControllerDelegate {
         
         do {
             print("begin session")
-            captureDeviceInput = try AVCaptureDeviceInput(device: captureDevice)
+            captureDeviceInput = try AVCaptureDeviceInput(device: captureDevice!)
             
-            captureSession.addInput(captureDeviceInput)
+            captureSession.addInput(captureDeviceInput!)
             captureSession.startRunning()
            
             previewView.session = captureSession
-            self.previewView.videoPreviewLayer.connection.videoOrientation = .landscapeRight
+            self.previewView.videoPreviewLayer.connection?.videoOrientation = .landscapeRight
             
         } catch _ {
             print("Error Starting Session")
